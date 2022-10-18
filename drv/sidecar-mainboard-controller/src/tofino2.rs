@@ -627,7 +627,7 @@ impl DebugPort {
 
         for (i, chunk) in data.chunks_mut(4).enumerate() {
             self.read_spi_eeprom(offset + (i * 4))
-                .map(|bytes| chunk.copy_from_slice(&bytes))?;
+                .map(|bytes| chunk.copy_from_slice(&bytes[0..chunk.len()]))?;
         }
 
         Ok(())
@@ -645,7 +645,7 @@ impl DebugPort {
 
         let mut bytes = [0u8; 4];
         for (i, chunk) in data.chunks(4).enumerate() {
-            bytes.copy_from_slice(chunk);
+            bytes[0..chunk.len()].copy_from_slice(chunk);
             self.write_spi_eeprom(offset + (i * 4), bytes)?;
         }
 
