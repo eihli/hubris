@@ -159,10 +159,12 @@ impl FrontIOBoard {
             controller.enable_led_controller()?;
         }
 
-        for (_i, led_controller) in self.led_controllers.iter_mut().enumerate()
-        {
-            led_controller.set_iref_all(DEFAULT_LED_CURRENT)?;
-        }
+        self.led_controllers[0].set_iref_all(DEFAULT_LED_CURRENT)?;
+
+        // for (_i, led_controller) in self.led_controllers.iter_mut().enumerate()
+        // {
+        //     led_controller.set_iref_all(DEFAULT_LED_CURRENT)?;
+        // }
 
         Ok(())
     }
