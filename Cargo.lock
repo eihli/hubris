@@ -944,6 +944,7 @@ dependencies = [
  "derive-idol-err",
  "drv-i2c-api",
  "drv-onewire",
+ "num-derive",
  "num-traits",
  "pmbus",
  "ringbuf",

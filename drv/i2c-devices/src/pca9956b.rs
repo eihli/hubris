@@ -6,12 +6,14 @@
 
 use crate::Validate;
 use drv_i2c_api::*;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, FromPrimitive, Eq, PartialEq)]
 pub enum Register {
-    MODE0 = 0x00,
-    MODE1 = 0x01,
+    MODE1 = 0x00,
+    MODE2 = 0x01,
     LEDOUT0 = 0x02,
     LEDOUT1 = 0x03,
     LEDOUT2 = 0x04,
@@ -87,48 +89,75 @@ pub struct Pca9956B {
     device: I2cDevice,
 }
 
+const NUM_LEDS: u8 = 24;
+
 #[derive(Debug)]
 pub enum Error {
-    BadRegisterRead { reg: Register, code: ResponseCode },
-    BadRegisterWrite { reg: Register, code: ResponseCode },
-    BadValidation { reg: Register, code: ResponseCode },
+    /// The low-level I2C communication returned an error
+    I2cError(ResponseCode),
+
+    /// The LED index is too large
+    InvalidLED(u8),
+}
+
+impl From<ResponseCode> for Error {
+    fn from(err: ResponseCode) -> Self {
+        Error::I2cError(err)
+    }
 }
 
 impl From<Error> for ResponseCode {
     fn from(err: Error) -> Self {
         match err {
-            Error::BadRegisterRead { code, .. } => code,
-            Error::BadRegisterWrite { code, .. } => code,
-            Error::BadValidation { code, .. } => code,
+            Error::I2cError(code) => code,
+            _ => panic!(),
         }
     }
 }
 
 impl Pca9956B {
     pub fn new(device: &I2cDevice) -> Self {
-        Self {
-            device: *device,
-        }
+        Self { device: *device }
     }
 
     fn read_reg(&self, reg: Register) -> Result<u8, Error> {
         self.device
             .read_reg::<u8, u8>(reg as u8)
-            .map_err(|code| Error::BadRegisterRead { reg, code })
+            .map_err(|code| Error::I2cError(code))
+    }
+
+    fn write_reg(&self, reg: Register, val: u8) -> Result<(), Error> {
+        let buffer = [reg as u8, val];
+        self.device
+            .write(&buffer)
+            .map_err(|code| Error::I2cError(code))
+    }
+
+    pub fn set_iref_all(&self, val: u8) -> Result<(), Error> {
+        self.write_reg(Register::IREFALL, val)
+    }
+
+    pub fn set_pwm_all(&self, val: u8) -> Result<(), Error> {
+        self.write_reg(Register::PWMALL, val)
+    }
+
+    pub fn set_led_pwm(&self, led: u8, val: u8) -> Result<(), Error> {
+        if led >= NUM_LEDS {
+            return Err(Error::InvalidLED(led));
+        }
+        let reg = FromPrimitive::from_u8((Register::PWM0 as u8) + led).unwrap();
+        self.write_reg(reg, val)
     }
 }
 
 // The PCA9956B does not expose anything like a unique ID or manufacturer code,
 // which is the type of information we typically like to validate against.
-// Reading MODE0 has a number of bits which default to 1s, but we also expect to
-// modify MODE0 during normal operation. Thus the validation method I'm choosing
-// is to see a non-zero value in that register, which should work when the
-// device is freshly powered on as well as during normal operation.
+// MODE2[2:0] are set to read only an initialized to b101, so use that to
+// validate.
 impl Validate<Error> for Pca9956B {
     fn validate(device: &I2cDevice) -> Result<bool, Error> {
-        let mode = Pca9956B::new(device)
-            .read_reg(Register::MODE0)?;
+        let mode = Pca9956B::new(device).read_reg(Register::MODE2)?;
 
-        Ok(mode != 0x00)
+        Ok(mode & 0x7 == 0x05)
     }
 }

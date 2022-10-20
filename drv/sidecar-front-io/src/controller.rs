@@ -93,7 +93,7 @@ impl FrontIOController {
         self.user_design.write(
             WriteOp::BitClear,
             Addr::LED_CTRL,
-            Reg::LED_CTRL::OE | Reg::LED_CTRL::RESET,
+            Reg::LED_CTRL::RESET,
         )
     }
 }

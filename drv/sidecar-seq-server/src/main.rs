@@ -566,6 +566,7 @@ fn main() -> ! {
         ringbuf_entry!(Trace::FrontIOVsc8562Ready);
 
         server.front_io_board.enable_led_controllers().unwrap();
+        server.front_io_board.turn_on_system_led().unwrap();
 
         ringbuf_entry!(Trace::FrontIOPca9956BEnabled);
     } else {
