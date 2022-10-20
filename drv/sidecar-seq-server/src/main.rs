@@ -84,6 +84,7 @@ enum Trace {
         expected: [u8; 4],
     },
     FrontIOVsc8562Ready,
+    FrontIOPca9956BEnabled,
 }
 ringbuf!(Trace, 32, Trace::None);
 
@@ -563,6 +564,10 @@ fn main() -> ! {
         }
 
         ringbuf_entry!(Trace::FrontIOVsc8562Ready);
+
+        server.front_io_board.enable_led_controllers().unwrap();
+
+        ringbuf_entry!(Trace::FrontIOPca9956BEnabled);
     } else {
         ringbuf_entry!(Trace::NoFrontIOBoardPresent);
     }

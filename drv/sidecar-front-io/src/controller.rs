@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::{Addr, SIDECAR_IO_BITSTREAM_CHECKSUM};
+use crate::{Addr, Reg, SIDECAR_IO_BITSTREAM_CHECKSUM};
 use drv_fpga_api::*;
 
 pub struct FrontIOController {
@@ -86,5 +86,14 @@ impl FrontIOController {
     /// SHA3-256 hash of the bitstream.
     pub fn short_checksum() -> [u8; 4] {
         SIDECAR_IO_BITSTREAM_CHECKSUM[..4].try_into().unwrap()
+    }
+
+    /// Releases the LED controller from reset and enables the output
+    pub fn enable_led_controller(&self) -> Result<(), FpgaError> {
+        self.user_design.write(
+            WriteOp::BitClear,
+            Addr::LED_CTRL,
+            Reg::LED_CTRL::OE | Reg::LED_CTRL::RESET,
+        )
     }
 }
