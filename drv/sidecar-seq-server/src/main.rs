@@ -566,7 +566,15 @@ fn main() -> ! {
         ringbuf_entry!(Trace::FrontIOVsc8562Ready);
 
         server.front_io_board.enable_led_controllers().unwrap();
-        server.front_io_board.turn_on_system_led().unwrap();
+
+        let leds = server.front_io_board.leds();
+        // Errors are being temporarily suppressed here due to a miswiring of
+        // the I2C bus at the LED controller parts. They will not be accessible
+        // without rework to older hardware, and newer (correct) hardware will
+        // be replacing the hold stuff very soon.
+        // TODO: remove error suppression here once Rev B hardware is in
+        let _ = leds.initialize_current();
+        let _ = leds.turn_on_system_led();
 
         ringbuf_entry!(Trace::FrontIOPca9956BEnabled);
     } else {

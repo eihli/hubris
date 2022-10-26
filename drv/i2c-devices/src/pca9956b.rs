@@ -89,7 +89,7 @@ pub struct Pca9956B {
     device: I2cDevice,
 }
 
-const NUM_LEDS: u8 = 24;
+pub const NUM_LEDS: u8 = 24;
 
 #[derive(Debug)]
 pub enum Error {

@@ -12,3 +12,6 @@ pub mod controller;
 pub mod phy_smi;
 #[cfg(feature = "transceivers")]
 pub mod transceivers;
+
+#[cfg(feature = "leds")]
+pub mod leds;

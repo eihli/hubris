@@ -1198,6 +1198,8 @@ dependencies = [
  "build-util",
  "drv-auxflash-api",
  "drv-fpga-api",
+ "drv-i2c-api",
+ "drv-i2c-devices",
  "drv-transceivers-api",
  "gnarle",
  "num-traits",
