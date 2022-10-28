@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 use drv_i2c_api::I2cDevice;
-use drv_i2c_devices::pca9956b::{Error, Pca9956B, NUM_LEDS};
+use drv_i2c_devices::pca9956b::{Error, Pca9956B};
 
 pub struct Leds {
     controllers: [Pca9956B; 2],
@@ -24,11 +24,9 @@ const DEFAULT_LED_CURRENT: u8 = 222;
 /// PWM/256.
 const DEFAULT_LED_PWM: u8 = 255;
 
-const NUM_LED_CONTROLLERS: u8 = 2;
-const TOTAL_LEDS: usize = (NUM_LED_CONTROLLERS * NUM_LEDS) as usize;
-
 // There are two LED controllers, each controlling the LEDs on either the left
 // or right of the board.
+#[derive(PartialEq)]
 enum LedController {
     Left = 0,
     Right = 1,
@@ -255,22 +253,27 @@ impl Leds {
     }
 
     pub fn update_led_state(&self, mask: u32) -> Result<(), Error> {
-        let mut data: [u8; TOTAL_LEDS] = [0; TOTAL_LEDS];
+        let mut data_l: [u8; 16] = [0; 16];
+        let mut data_r: [u8; 16] = [0; 16];
 
         for i in 0..32 {
             let bit_mask: u32 = 1 << i;
-            let controller = LED_MAP[i].controller as usize;
-            let output = LED_MAP[i].output as usize;
-            data[controller * 24 + output] = if (mask & bit_mask) != 0 {
+            let pwm_value = if (mask & bit_mask) != 0 {
                 DEFAULT_LED_PWM
             } else {
                 0
             };
+            if LED_MAP[i].controller == LedController::Left {
+                data_l[LED_MAP[i].output as usize] = pwm_value;
+            } else {
+                data_r[LED_MAP[i].output as usize] = pwm_value;
+            }
         }
 
-        for (i, controller) in self.controllers.iter().enumerate() {
-            controller.set_all_led_pwm(data[i*24..(i+1)*24-1].try_into().unwrap())?;
-        }
+        self.controllers[LedController::Left as usize]
+            .set_all_led_pwm(&data_l)?;
+        self.controllers[LedController::Right as usize]
+            .set_all_led_pwm(&data_r)?;
 
         Ok(())
     }

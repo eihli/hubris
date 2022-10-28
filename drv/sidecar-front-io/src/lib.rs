@@ -8,9 +8,9 @@ include!(concat!(env!("OUT_DIR"), "/sidecar_qsfp_x32_controller.rs"));
 
 #[cfg(feature = "controller")]
 pub mod controller;
+#[cfg(feature = "leds")]
+pub mod leds;
 #[cfg(feature = "phy_smi")]
 pub mod phy_smi;
 #[cfg(feature = "transceivers")]
 pub mod transceivers;
-#[cfg(feature = "leds")]
-pub mod leds;

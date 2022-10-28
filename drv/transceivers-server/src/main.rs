@@ -5,7 +5,8 @@
 #![no_std]
 #![no_main]
 
-use drv_sidecar_front_io::{transceivers::Transceivers, leds::Leds};
+use drv_i2c_devices::pca9956b::Error;
+use drv_sidecar_front_io::{leds::Leds, transceivers::Transceivers};
 use drv_transceivers_api::{
     ModulesStatus, TransceiversError, NUM_PORTS, PAGE_SIZE_BYTES,
 };
@@ -26,13 +27,16 @@ enum Trace {
     None,
     LEDInit,
     LEDInitComplete,
+    LEDError(Error),
+    LEDUpdate,
     ModulePresence(u32),
+    TransceiversError(TransceiversError),
 }
-ringbuf!(Trace, 32, Trace::None);
+ringbuf!(Trace, 16, Trace::None);
 
 struct ServerImpl {
     transceivers: Transceivers,
-    leds: Leds
+    leds: Leds,
 }
 
 const TIMER_NOTIFICATION_MASK: u32 = 1 << 0;
@@ -187,13 +191,23 @@ impl NotificationHandler for ServerImpl {
 
     fn handle_notification(&mut self, _bits: u32) {
         let presence = match self.transceivers.get_modules_status() {
-            Ok(status) => status.present,
-            Err(_) => 0,
+            Ok(status) => {
+                // ringbuf_entry!(Trace::ModulePresence(status.present));
+                status.present
+            }
+            Err(e) => {
+                // ringbuf_entry!(Trace::TransceiversError(
+                //     TransceiversError::from(e)
+                // ));
+                0
+            }
         };
 
-        ringbuf_entry!(Trace::ModulePresence(presence));
-
-        self.leds.update_led_state(presence).unwrap();
+        self.leds.update_led_state(presence);
+        // match self.leds.update_led_state(presence) {
+        //     Ok(_) => ringbuf_entry!(Trace::LEDUpdate),
+        //     Err(e) => ringbuf_entry!(Trace::LEDError(e)),
+        // }
 
         let next_deadline = sys_get_timer().now + TIMER_INTERVAL;
         sys_set_timer(Some(next_deadline), TIMER_NOTIFICATION_MASK)
@@ -209,10 +223,7 @@ fn main() -> ! {
             &i2c_config::devices::pca9956b_right_front_io(I2C.get_task_id())[0],
         );
 
-        let mut server = ServerImpl {
-            transceivers,
-            leds,
-        };
+        let mut server = ServerImpl { transceivers, leds };
 
         ringbuf_entry!(Trace::LEDInit);
 
@@ -233,7 +244,7 @@ fn main() -> ! {
 
         let mut buffer = [0; idl::INCOMING_SIZE];
         loop {
-            idol_runtime::dispatch(&mut buffer, &mut server);
+            idol_runtime::dispatch_n(&mut buffer, &mut server);
         }
     }
 }

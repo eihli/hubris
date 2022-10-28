@@ -4,6 +4,8 @@
 
 //! Driver for the PCA9956B LED driver
 
+use core::convert::TryInto;
+
 use crate::Validate;
 use drv_i2c_api::*;
 use num_derive::FromPrimitive;
@@ -85,15 +87,33 @@ pub enum Register {
     EFLAG5 = 0x46,
 }
 
-const AUTO_INCR_FLAG: u8 = 1 << 7;
+pub enum LedErr {
+    NoError = 0b00,
+    ShortCircuit = 0b01,
+    OpenCircuit = 0b10,
+    Invalid = 0b11,
+}
+
+pub struct Pca9956BErrorState {
+    led_errors: [LedErr; NUM_LEDS],
+    overtemp: bool
+}
+
+// TODO(aaron): RON these regsiters?
+/// Auto-increment flag is Bit 7 of the control register. Bits 6..0 are address.
+const CTRL_AUTO_INCR: u8 = 1 << 7;
+
+const MODE2_OVERTEMP: u8 = 1 << 7;
+const MODE2_ERROR: u8 = 1 << 6;
+const MODE2
 
 pub struct Pca9956B {
     device: I2cDevice,
 }
 
-pub const NUM_LEDS: u8 = 24;
+pub const NUM_LEDS: usize = 24;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Error {
     /// The low-level I2C communication returned an error
     I2cError(ResponseCode),
@@ -128,6 +148,12 @@ impl Pca9956B {
             .map_err(|code| Error::I2cError(code))
     }
 
+    fn read_buffer(&self, reg: Register, buf: &mut [u8]) -> Result<(), Error> {
+        self.device
+            .read_reg_into((reg as u8) | CTRL_AUTO_INCR, buf)
+            .map_err(|code| Error::I2cError(code))
+    }
+
     fn write_reg(&self, reg: Register, val: u8) -> Result<(), Error> {
         let buffer = [reg as u8, val];
         self.device
@@ -135,13 +161,13 @@ impl Pca9956B {
             .map_err(|code| Error::I2cError(code))
     }
 
-    fn write_buffer(&self, reg: Register, buf: [u8; NUM_LEDS as usize]) -> Result<(), Error> {
+    fn write_buffer(&self, reg: Register, buf: &[u8]) -> Result<(), Error> {
         let mut data: [u8; 25] = [0; 25];
-        data[0] = (reg as u8) | AUTO_INCR_FLAG;
-        data[1..buf.len()].copy_from_slice(buf.as_slice());
+        data[0] = (reg as u8) | CTRL_AUTO_INCR;
+        data[1..=buf.len()].copy_from_slice(buf);
 
         self.device
-            .write(&data)
+            .write(&data[..=buf.len()])
             .map_err(|code| Error::I2cError(code))
     }
 
@@ -161,11 +187,19 @@ impl Pca9956B {
         self.write_reg(reg, val)
     }
 
-    pub fn set_all_led_pwm(&self, vals: [u8; NUM_LEDS as usize]) -> Result<(), Error> {
+    pub fn set_all_led_pwm(&self, vals: &[u8]) -> Result<(), Error> {
+        if vals.len() > NUM_LEDS {
+            return Err(Error::InvalidLED(
+                vals.len().try_into().unwrap_or(0xFF),
+            ));
+        }
         let reg = FromPrimitive::from_u8(Register::PWM0 as u8).unwrap();
-        self.write_buffer(reg, vals)
+        self.write_buffer(reg, &vals)
     }
 
+    pub fn get_errors(&self) -> Result<Pca9956BErrorState, Error> {
+
+    }
 }
 
 // The PCA9956B does not expose anything like a unique ID or manufacturer code,
