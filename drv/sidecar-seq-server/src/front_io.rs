@@ -112,12 +112,4 @@ impl FrontIOBoard {
 
         Ok(controllers_ready)
     }
-
-    pub fn enable_led_controllers(&mut self) -> Result<(), FpgaError> {
-        for (_i, controller) in self.controllers.iter_mut().enumerate() {
-            controller.enable_led_controller()?;
-        }
-
-        Ok(())
-    }
 }

@@ -85,6 +85,8 @@ pub enum Register {
     EFLAG5 = 0x46,
 }
 
+const AUTO_INCR_FLAG: u8 = 1 << 7;
+
 pub struct Pca9956B {
     device: I2cDevice,
 }
@@ -133,6 +135,16 @@ impl Pca9956B {
             .map_err(|code| Error::I2cError(code))
     }
 
+    fn write_buffer(&self, reg: Register, buf: [u8; NUM_LEDS as usize]) -> Result<(), Error> {
+        let mut data: [u8; 25] = [0; 25];
+        data[0] = (reg as u8) | AUTO_INCR_FLAG;
+        data[1..buf.len()].copy_from_slice(buf.as_slice());
+
+        self.device
+            .write(&data)
+            .map_err(|code| Error::I2cError(code))
+    }
+
     pub fn set_iref_all(&self, val: u8) -> Result<(), Error> {
         self.write_reg(Register::IREFALL, val)
     }
@@ -141,13 +153,19 @@ impl Pca9956B {
         self.write_reg(Register::PWMALL, val)
     }
 
-    pub fn set_led_pwm(&self, led: u8, val: u8) -> Result<(), Error> {
-        if led >= NUM_LEDS {
+    pub fn set_a_led_pwm(&self, led: u8, val: u8) -> Result<(), Error> {
+        if led >= NUM_LEDS as u8 {
             return Err(Error::InvalidLED(led));
         }
         let reg = FromPrimitive::from_u8((Register::PWM0 as u8) + led).unwrap();
         self.write_reg(reg, val)
     }
+
+    pub fn set_all_led_pwm(&self, vals: [u8; NUM_LEDS as usize]) -> Result<(), Error> {
+        let reg = FromPrimitive::from_u8(Register::PWM0 as u8).unwrap();
+        self.write_buffer(reg, vals)
+    }
+
 }
 
 // The PCA9956B does not expose anything like a unique ID or manufacturer code,

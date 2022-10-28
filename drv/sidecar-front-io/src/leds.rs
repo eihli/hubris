@@ -249,12 +249,12 @@ impl Leds {
 
     pub fn turn_on_system_led(&self) -> Result<(), Error> {
         self.controllers[LED_MAP[SYSTEM_LED_IDX].controller as usize]
-            .set_led_pwm(LED_MAP[SYSTEM_LED_IDX].output, DEFAULT_LED_PWM)?;
+            .set_a_led_pwm(LED_MAP[SYSTEM_LED_IDX].output, DEFAULT_LED_PWM)?;
 
         Ok(())
     }
 
-    pub fn build_led_data(mask: u32) -> [u8; TOTAL_LEDS] {
+    pub fn update_led_state(&self, mask: u32) -> Result<(), Error> {
         let mut data: [u8; TOTAL_LEDS] = [0; TOTAL_LEDS];
 
         for i in 0..32 {
@@ -268,6 +268,10 @@ impl Leds {
             };
         }
 
-        data
+        for (i, controller) in self.controllers.iter().enumerate() {
+            controller.set_all_led_pwm(data[i*24..(i+1)*24-1].try_into().unwrap())?;
+        }
+
+        Ok(())
     }
 }
