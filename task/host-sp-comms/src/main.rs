@@ -15,7 +15,7 @@ use drv_usart::Usart;
 use enum_map::Enum;
 use heapless::Vec;
 use host_sp_messages::{
-    Bsu, DecodeFailureReason, HostToSp, HubpackError, SpToHost, Status,
+    Bsu, DecodeFailureReason, Header, HostToSp, HubpackError, SpToHost, Status,
     MAX_MESSAGE_SIZE,
 };
 use idol_runtime::{NotificationHandler, RequestError};
@@ -380,32 +380,9 @@ impl ServerImpl {
                 ringbuf_entry!(Trace::UartRxOverrun);
             }
 
-            // Receive until there's no more data or we get a 0x00, signifying
-            // the end of a corncobs packet.
-            'rx: while let Some(byte) = self.uart.try_rx_pop() {
-                ringbuf_entry!(Trace::UartRx(byte));
-
-                if byte != 0x00 {
-                    // This is the end of a packet; buffer it and continue.
-                    if self.rx_buf.push(byte).is_err() {
-                        // Message overflow - nothing we can do here except
-                        // discard data. We'll drop this byte and wait til we
-                        // see a 0 to respond, at which point our
-                        // deserialization will presumably fail and we'll send
-                        // back an error. Should we record that we overflowed
-                        // here?
-                    }
-                    continue 'rx;
-                }
-
-                // Host may send extra cobs terminators; skip any empty
-                // packets.
-                if self.rx_buf.is_empty() {
-                    continue 'rx;
-                }
-
-                // Process message and set up `self.tx_buf` with our response
-                // (or intermediate state if we don't have a response yet).
+            // Receive until we either get a packet or have no more data.
+            if self.uart_rx_until_maybe_packet() {
+                // We received a packet; handle it.
                 self.process_message();
                 self.rx_buf.clear();
 
@@ -433,6 +410,33 @@ impl ServerImpl {
             }
             return;
         }
+    }
+
+    fn uart_rx_until_maybe_packet(&mut self) -> bool {
+        while let Some(byte) = self.uart.try_rx_pop() {
+            ringbuf_entry!(Trace::UartRx(byte));
+
+            if byte == 0x00 {
+                // COBS terminator; did we get any data?
+                if self.rx_buf.is_empty() {
+                    continue;
+                } else {
+                    return true;
+                }
+            }
+
+            // Not a COBS terminator; buffer it.
+            if self.rx_buf.push(byte).is_err() {
+                // Message overflow - nothing we can do here except
+                // discard data. We'll drop this byte and wait til we
+                // see a 0 to respond, at which point our
+                // deserialization will presumably fail and we'll send
+                // back an error. Should we record that we overflowed
+                // here?
+            }
+        }
+
+        false
     }
 
     fn handle_control_plane_agent_notification(&mut self) {
@@ -475,51 +479,13 @@ impl ServerImpl {
     // with a response if we can come up with that response immediately, or
     // instructing it that we'll fill it in with our response later.
     fn process_message(&mut self) {
-        let deframed = match corncobs::decode_in_place(self.rx_buf) {
-            Ok(n) => &self.rx_buf[..n],
-            Err(_) => {
-                self.tx_buf
-                    .encode_decode_failure_reason(DecodeFailureReason::Cobs);
+        let (header, request) = match decode_packet(&mut self.rx_buf) {
+            Ok((header, request, _data)) => (header, request),
+            Err(reason) => {
+                self.tx_buf.encode_decode_failure_reason(reason);
                 return;
             }
         };
-
-        let (header, request, _data) =
-            match host_sp_messages::deserialize::<HostToSp>(deframed) {
-                Ok((header, request, data)) => (header, request, data),
-                Err(HubpackError::Custom) => {
-                    self.tx_buf
-                        .encode_decode_failure_reason(DecodeFailureReason::Crc);
-                    return;
-                }
-                Err(_) => {
-                    self.tx_buf.encode_decode_failure_reason(
-                        DecodeFailureReason::Deserialize,
-                    );
-                    return;
-                }
-            };
-
-        if header.magic != host_sp_messages::MAGIC {
-            self.tx_buf.encode_decode_failure_reason(
-                DecodeFailureReason::MagicMismatch,
-            );
-            return;
-        }
-
-        if header.version != host_sp_messages::version::V1 {
-            self.tx_buf.encode_decode_failure_reason(
-                DecodeFailureReason::VersionMismatch,
-            );
-            return;
-        }
-
-        if header.sequence & SEQ_REPLY != 0 {
-            self.tx_buf.encode_decode_failure_reason(
-                DecodeFailureReason::SequenceInvalid,
-            );
-            return;
-        }
 
         // We defer any actions until after we've serialized our response to
         // avoid borrow checker issues with calling methods on `self`.
@@ -642,6 +608,36 @@ impl ServerImpl {
             }
         }
     }
+}
+
+fn decode_packet(
+    rx_buf: &mut Vec<u8, MAX_PACKET_SIZE>,
+) -> Result<(Header, HostToSp, &[u8]), DecodeFailureReason> {
+    let n = corncobs::decode_in_place(rx_buf)
+        .map_err(|_| DecodeFailureReason::Cobs)?;
+    let deframed = &rx_buf[..n];
+
+    let (header, request, data) =
+        host_sp_messages::deserialize::<HostToSp>(deframed).map_err(|err| {
+            match err {
+                HubpackError::Custom => DecodeFailureReason::Crc,
+                _ => DecodeFailureReason::Deserialize,
+            }
+        })?;
+
+    if header.magic != host_sp_messages::MAGIC {
+        return Err(DecodeFailureReason::MagicMismatch);
+    }
+
+    if header.version != host_sp_messages::version::V1 {
+        return Err(DecodeFailureReason::VersionMismatch);
+    }
+
+    if header.sequence & SEQ_REPLY != 0 {
+        return Err(DecodeFailureReason::SequenceInvalid);
+    }
+
+    Ok((header, request, data))
 }
 
 impl NotificationHandler for ServerImpl {
