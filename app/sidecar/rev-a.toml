@@ -250,7 +250,7 @@ priority = 4
 max-sizes = {flash = 8192, ram = 2048}
 stacksize = 1024
 start = true
-task-slots = ["sys", {front_io = "ecp5_front_io"}]
+task-slots = ["sys", "i2c_driver", {front_io = "ecp5_front_io"}]
 
 [tasks.sequencer]
 name = "drv-sidecar-seq-server"

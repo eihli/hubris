@@ -5,18 +5,28 @@
 #![no_std]
 #![no_main]
 
-use drv_sidecar_front_io::transceivers::Transceivers;
+use drv_sidecar_front_io::{transceivers::Transceivers, leds::Leds};
 use drv_transceivers_api::{
     ModulesStatus, TransceiversError, NUM_PORTS, PAGE_SIZE_BYTES,
 };
-use idol_runtime::{ClientError, Leased, RequestError, R, W};
-use userlib::task_slot;
+use idol_runtime::{
+    ClientError, Leased, NotificationHandler, RequestError, R, W,
+};
+use userlib::*;
 
+task_slot!(I2C, i2c_driver);
 task_slot!(FRONT_IO, front_io);
+
+include!(concat!(env!("OUT_DIR"), "/i2c_config.rs"));
 
 struct ServerImpl {
     transceivers: Transceivers,
+    leds: Leds,
+    deadline: u64,
 }
+
+const TIMER_MASK: u32 = 1 << 0;
+const TIMER_INTERVAL: u64 = 500;
 
 impl idl::InOrderTransceiversImpl for ServerImpl {
     fn get_modules_status(
@@ -160,14 +170,42 @@ impl idl::InOrderTransceiversImpl for ServerImpl {
     }
 }
 
+impl NotificationHandler for ServerImpl {
+    fn current_notification_mask(&self) -> u32 {
+        TIMER_MASK
+    }
+
+    fn handle_notification(&mut self, bits: u32) {
+        let now = sys_get_timer().now;
+        if now >= self.deadline {
+            // do something
+
+            self.deadline = now + TIMER_INTERVAL;
+        }
+        sys_set_timer(Some(self.deadline), TIMER_MASK)
+    }
+}
+
 #[export_name = "main"]
 fn main() -> ! {
     loop {
-        let mut buffer = [0; idl::INCOMING_SIZE];
         let transceivers = Transceivers::new(FRONT_IO.get_task_id());
+        let leds = Leds::new(
+            &i2c_config::devices::pca9956b_left_front_io(I2C.get_task_id())[0],
+            &i2c_config::devices::pca9956b_right_front_io(I2C.get_task_id())[0],
+        );
 
-        let mut server = ServerImpl { transceivers };
+        // This will put our timer in the past, immediately forcing an update
+        let deadline = sys_get_timer().now;
+        sys_set_timer(Some(deadline), TIMER_MASK);
 
+        let mut server = ServerImpl {
+            transceivers,
+            leds,
+            deadline,
+        };
+
+        let mut buffer = [0; idl::INCOMING_SIZE];
         loop {
             idol_runtime::dispatch(&mut buffer, &mut server);
         }

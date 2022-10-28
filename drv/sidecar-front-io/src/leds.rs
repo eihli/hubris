@@ -221,9 +221,15 @@ const LED_MAP: [LedLocation; 33] = [
 ];
 
 impl Leds {
-    pub fn new(left_controller: &I2cDevice, right_controller: &I2cDevice) -> Self {
+    pub fn new(
+        left_controller: &I2cDevice,
+        right_controller: &I2cDevice,
+    ) -> Self {
         Self {
-            controllers: [Pca9956B::new(left_controller), Pca9956B::new(right_controller)],
+            controllers: [
+                Pca9956B::new(left_controller),
+                Pca9956B::new(right_controller),
+            ],
         }
     }
 

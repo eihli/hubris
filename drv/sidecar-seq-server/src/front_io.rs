@@ -5,7 +5,7 @@
 use crate::*;
 use drv_i2c_devices::{at24csw080::At24Csw080, Validate};
 use drv_sidecar_front_io::{
-    controller::FrontIOController, leds::Leds, phy_smi::PhySmi,
+    controller::FrontIOController, phy_smi::PhySmi,
 };
 
 #[allow(dead_code)]
@@ -39,13 +39,6 @@ impl FrontIOBoard {
 
     pub fn phy_smi(&self) -> PhySmi {
         PhySmi::new(self.fpga_task)
-    }
-
-    pub fn leds(&self) -> Leds {
-        Leds::new(
-                &i2c_config::devices::pca9956b_left_front_io(self.i2c_task)[0],
-                &i2c_config::devices::pca9956b_right_front_io(self.i2c_task)[0],
-        )
     }
 
     pub fn present(&self) -> bool {

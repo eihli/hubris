@@ -1553,6 +1553,8 @@ name = "drv-transceivers-server"
 version = "0.1.0"
 dependencies = [
  "build-util",
+ "drv-i2c-api",
+ "drv-i2c-devices",
  "drv-sidecar-front-io",
  "drv-transceivers-api",
  "idol",
