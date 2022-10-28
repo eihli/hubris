@@ -16,6 +16,8 @@
 //! - [`max31790`]: MAX31790 fan controller
 //! - [`mcp9808`]: MCP9808 temperature sensor
 //! - [`nvme_bmc`]: NVMe basic management control
+//! - [`nvme_bmc_bad_mux`]: NVMe basic management control, with a bad I2C mux
+//!   (communication is only allowed when the device is known to be powered)
 //! - [`pca9538`]: PCA9538 GPIO expander
 //! - [`pct2075`]: PCT2075 temperature sensor
 //! - [`raa229618`]: RAA229618 power controller
@@ -166,6 +168,7 @@ pub mod max5970;
 pub mod max6634;
 pub mod mcp9808;
 pub mod nvme_bmc;
+pub mod nvme_bmc_bad_mux;
 pub mod pca9538;
 pub mod pct2075;
 pub mod raa229618;

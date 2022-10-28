@@ -446,7 +446,7 @@ bus = "front"
 mux = 1
 segment = 1
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 A NVMe Basic Management Command"
 sensors = { temperature = 1 }
 name = "U2_N0"
@@ -480,7 +480,7 @@ bus = "front"
 mux = 1
 segment = 2
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 B NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N1"
@@ -514,7 +514,7 @@ bus = "front"
 mux = 1
 segment = 3
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 C NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N2"
@@ -548,7 +548,7 @@ bus = "front"
 mux = 1
 segment = 4
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 D NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N3"
@@ -582,7 +582,7 @@ bus = "front"
 mux = 2
 segment = 1
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 E NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N4"
@@ -616,7 +616,7 @@ bus = "front"
 mux = 2
 segment = 2
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 F NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N5"
@@ -650,7 +650,7 @@ bus = "front"
 mux = 2
 segment = 3
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 G NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N6"
@@ -684,7 +684,7 @@ bus = "front"
 mux = 2
 segment = 4
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 H NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N7"
@@ -718,7 +718,7 @@ bus = "front"
 mux = 3
 segment = 1
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 I NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N8"
@@ -752,7 +752,7 @@ bus = "front"
 mux = 3
 segment = 2
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc"
 description = "U.2 J NVMe Basic Management Control"
 sensors = { temperature = 1 }
 name = "U2_N9"
@@ -780,7 +780,7 @@ bus = "m2"
 mux = 1
 segment = 1
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc_bad_mux"
 description = "M.2 A NVMe Basic Management Command"
 name = "M2_A"
 sensors = { temperature = 1 }
@@ -791,7 +791,7 @@ bus = "m2"
 mux = 1
 segment = 2
 address = 0b110_1010
-device = "nvmebmc"
+device = "nvme_bmc_bad_mux"
 description = "M.2 B NVMe Basic Management Command"
 name = "M2_B"
 sensors = { temperature = 1 }
