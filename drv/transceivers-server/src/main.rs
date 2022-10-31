@@ -5,8 +5,10 @@
 #![no_std]
 #![no_main]
 
-use drv_i2c_devices::pca9956b::Error;
-use drv_sidecar_front_io::{leds::Leds, transceivers::Transceivers};
+use drv_sidecar_front_io::{
+    leds::FullErrorSummary, leds::Leds, phy_smi::PhySmi,
+    transceivers::Transceivers,
+};
 use drv_transceivers_api::{
     ModulesStatus, TransceiversError, NUM_PORTS, PAGE_SIZE_BYTES,
 };
@@ -22,14 +24,13 @@ task_slot!(FRONT_IO, front_io);
 include!(concat!(env!("OUT_DIR"), "/i2c_config.rs"));
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum Trace {
     None,
     LEDInit,
     LEDInitComplete,
-    LEDError(Error),
-    LEDUpdate,
-    ModulePresence(u32),
+    LEDErrorUpdate(FullErrorSummary),
+    ModulePresenceUpdate(u32),
     TransceiversError(TransceiversError),
 }
 ringbuf!(Trace, 16, Trace::None);
@@ -37,6 +38,8 @@ ringbuf!(Trace, 16, Trace::None);
 struct ServerImpl {
     transceivers: Transceivers,
     leds: Leds,
+    modules_present: u32,
+    led_error: FullErrorSummary,
 }
 
 const TIMER_NOTIFICATION_MASK: u32 = 1 << 0;
@@ -190,24 +193,30 @@ impl NotificationHandler for ServerImpl {
     }
 
     fn handle_notification(&mut self, _bits: u32) {
-        let presence = match self.transceivers.get_modules_status() {
-            Ok(status) => {
-                // ringbuf_entry!(Trace::ModulePresence(status.present));
-                status.present
-            }
-            Err(e) => {
-                // ringbuf_entry!(Trace::TransceiversError(
-                //     TransceiversError::from(e)
-                // ));
-                0
-            }
+        // Check for errors
+        let errors = match self.leds.error_summary().unwrap() {
+            Some(e) => e,
+            None => FullErrorSummary {
+                ..Default::default()
+            },
         };
 
-        self.leds.update_led_state(presence);
-        // match self.leds.update_led_state(presence) {
-        //     Ok(_) => ringbuf_entry!(Trace::LEDUpdate),
-        //     Err(e) => ringbuf_entry!(Trace::LEDError(e)),
-        // }
+        if errors != self.led_error {
+            self.led_error = errors;
+            ringbuf_entry!(Trace::LEDErrorUpdate(errors))
+        }
+
+        // Query module presence and update LEDs accordingly
+        let presence = match self.transceivers.get_modules_status() {
+            Ok(status) => status.present,
+            Err(_) => 0,
+        };
+
+        if presence != self.modules_present {
+            self.leds.update_led_state(presence).unwrap();
+            self.modules_present = presence;
+            ringbuf_entry!(Trace::ModulePresenceUpdate(presence));
+        }
 
         let next_deadline = sys_get_timer().now + TIMER_INTERVAL;
         sys_set_timer(Some(next_deadline), TIMER_NOTIFICATION_MASK)
@@ -217,13 +226,28 @@ impl NotificationHandler for ServerImpl {
 #[export_name = "main"]
 fn main() -> ! {
     loop {
+        // This is a temporary workaround that makes sure the FPGAs are up
+        // before we start doing things with them. A more sophisticated
+        // notification system will be put in place.
+        let phy_smi = PhySmi::new(FRONT_IO.get_task_id());
+        while !phy_smi.phy_powered_up_and_ready().unwrap() {
+            userlib::hl::sleep_for(10);
+        }
+
         let transceivers = Transceivers::new(FRONT_IO.get_task_id());
         let leds = Leds::new(
             &i2c_config::devices::pca9956b_left_front_io(I2C.get_task_id())[0],
             &i2c_config::devices::pca9956b_right_front_io(I2C.get_task_id())[0],
         );
 
-        let mut server = ServerImpl { transceivers, leds };
+        let mut server = ServerImpl {
+            transceivers,
+            leds,
+            modules_present: 0,
+            led_error: FullErrorSummary {
+                ..Default::default()
+            },
+        };
 
         ringbuf_entry!(Trace::LEDInit);
 

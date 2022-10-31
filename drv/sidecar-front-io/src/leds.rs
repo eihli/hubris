@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 use drv_i2c_api::I2cDevice;
-use drv_i2c_devices::pca9956b::{Error, Pca9956B};
+use drv_i2c_devices::pca9956b::{
+    Error, LedErrSummary, Pca9956B, Pca9956BErrorState,
+};
 
 pub struct Leds {
     controllers: [Pca9956B; 2],
@@ -27,7 +29,7 @@ const DEFAULT_LED_PWM: u8 = 255;
 // There are two LED controllers, each controlling the LEDs on either the left
 // or right of the board.
 #[derive(PartialEq)]
-enum LedController {
+pub enum LedController {
     Left = 0,
     Right = 1,
 }
@@ -36,6 +38,12 @@ enum LedController {
 struct LedLocation {
     controller: LedController,
     output: u8,
+}
+
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
+pub struct FullErrorSummary {
+    pub left: LedErrSummary,
+    pub right: LedErrSummary,
 }
 
 /// System LED IDX
@@ -263,6 +271,7 @@ impl Leds {
             } else {
                 0
             };
+
             if LED_MAP[i].controller == LedController::Left {
                 data_l[LED_MAP[i].output as usize] = pwm_value;
             } else {
@@ -276,5 +285,43 @@ impl Leds {
             .set_all_led_pwm(&data_r)?;
 
         Ok(())
+    }
+
+    pub fn check_errors(
+        &self,
+        controller: LedController,
+    ) -> Result<Option<Pca9956BErrorState>, Error> {
+        Ok(self.controllers[controller as usize].check_for_errors()?)
+    }
+
+    pub fn error_summary(&self) -> Result<Option<FullErrorSummary>, Error> {
+        let errs = [
+            self.check_errors(LedController::Left).unwrap_or(None),
+            None
+            // self.check_errors(LedController::Right).unwrap_or(None),
+        ];
+
+        let no_errors: bool = errs
+            .iter()
+            .fold(true, |no_error, next| no_error | next.is_none());
+        if no_errors {
+            return Ok(None);
+        }
+
+        let mut summary = FullErrorSummary {
+            ..Default::default()
+        };
+
+        if errs[LedController::Left as usize].is_some() {
+            summary.left =
+                errs[LedController::Left as usize].unwrap().summary();
+        }
+
+        if errs[LedController::Right as usize].is_some() {
+            summary.right =
+                errs[LedController::Right as usize].unwrap().summary();
+        }
+
+        Ok(Some(summary))
     }
 }

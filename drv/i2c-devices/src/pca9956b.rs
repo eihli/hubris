@@ -87,6 +87,7 @@ pub enum Register {
     EFLAG5 = 0x46,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LedErr {
     NoError = 0b00,
     ShortCircuit = 0b01,
@@ -94,18 +95,66 @@ pub enum LedErr {
     Invalid = 0b11,
 }
 
-pub struct Pca9956BErrorState {
-    led_errors: [LedErr; NUM_LEDS],
-    overtemp: bool
+impl Default for LedErr {
+    fn default() -> Self {
+        LedErr::NoError
+    }
 }
 
-// TODO(aaron): RON these regsiters?
+impl From<u8> for LedErr {
+    fn from(i: u8) -> Self {
+        match i {
+            0 => LedErr::NoError,
+            1 => LedErr::ShortCircuit,
+            2 => LedErr::OpenCircuit,
+            _ => LedErr::Invalid,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct LedErrSummary {
+    overtemp: bool,
+    short_circuit: u8,
+    open_circuit: u8,
+    invalid: u8,
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct Pca9956BErrorState {
+    led_errors: [LedErr; NUM_LEDS],
+    overtemp: bool,
+}
+
+impl Pca9956BErrorState {
+    pub fn summary(&self) -> LedErrSummary {
+        let mut summary = LedErrSummary {
+            overtemp: self.overtemp,
+            ..Default::default()
+        };
+
+        for err in self.led_errors {
+            if err == LedErr::OpenCircuit {
+                summary.open_circuit += 1;
+            } else if err == LedErr::ShortCircuit {
+                summary.short_circuit += 1;
+            } else if err == LedErr::Invalid {
+                summary.invalid += 1;
+            }
+        }
+
+        summary
+    }
+}
+
 /// Auto-increment flag is Bit 7 of the control register. Bits 6..0 are address.
 const CTRL_AUTO_INCR: u8 = 1 << 7;
-
+/// The MODE2 OVERTEMP bit indicates if an overtempature condition has occurred
 const MODE2_OVERTEMP: u8 = 1 << 7;
+/// The MODE2 ERROR bit indicates if any error conditions are in EFLAGn
 const MODE2_ERROR: u8 = 1 << 6;
-const MODE2
+/// The MODE2 CLRERR bit clears all error conditions in EFLAGn
+const MODE2_CLRERR: u8 = 1 << 4;
 
 pub struct Pca9956B {
     device: I2cDevice,
@@ -151,7 +200,9 @@ impl Pca9956B {
     fn read_buffer(&self, reg: Register, buf: &mut [u8]) -> Result<(), Error> {
         self.device
             .read_reg_into((reg as u8) | CTRL_AUTO_INCR, buf)
-            .map_err(|code| Error::I2cError(code))
+            .map_err(|code| Error::I2cError(code))?;
+
+        Ok(())
     }
 
     fn write_reg(&self, reg: Register, val: u8) -> Result<(), Error> {
@@ -197,8 +248,38 @@ impl Pca9956B {
         self.write_buffer(reg, &vals)
     }
 
-    pub fn get_errors(&self) -> Result<Pca9956BErrorState, Error> {
+    pub fn check_for_errors(
+        &self,
+    ) -> Result<Option<Pca9956BErrorState>, Error> {
+        // Get MODE2 register, which holds OVERTEMP and ERROR information
+        let mode2 = self.read_reg(Register::MODE2)?;
+        let overtemp = (mode2 & MODE2_OVERTEMP) != 0;
+        let error = (mode2 & MODE2_ERROR) != 0;
 
+        // Check for error condition, go get EFLAGn registers,
+        // clearing them afterwards
+        if overtemp || error {
+            let mut err_state = Pca9956BErrorState {
+                ..Default::default()
+            };
+            err_state.overtemp = overtemp;
+
+            let mut eflags: [u8; 6] = [0; 6];
+            self.read_buffer(Register::EFLAG0, &mut eflags)?;
+
+            for i in 0..eflags.len() {
+                let eflag = eflags[i];
+                for j in 0..=3 {
+                    err_state.led_errors[(i * 4) + j] =
+                        LedErr::from(eflag & (0b11 << j * 2));
+                }
+            }
+
+            self.write_reg(Register::MODE2, mode2 & !MODE2_CLRERR)?;
+            Ok(Some(err_state))
+        } else {
+            Ok(None)
+        }
     }
 }
 
